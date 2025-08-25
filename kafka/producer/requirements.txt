@@ -1,0 +1,8 @@
+confluent-kafka==2.6.0
+pandas==2.2.2
+pandas-gbq==0.22.0
+pyyaml==6.0.2
+google-cloud-bigquery==3.25.0
+google-auth==2.33.0
+python-dateutil==2.9.0.post0
+

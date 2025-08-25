@@ -1,0 +1,131 @@
+version: "3.9"
+services:
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.6.1
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "2181:2181"
+
+  kafka:
+    image: confluentinc/cp-kafka:7.6.1
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: nyc_taxi
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./postgres/init:/docker-entrypoint-initdb.d
+
+  pgadmin:
+    image: dpage/pgadmin4:8.11
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@local
+      PGADMIN_DEFAULT_PASSWORD: admin
+    ports:
+      - "5050:80"
+    depends_on:
+      - postgres
+
+  airflow:
+    image: apache/airflow:2.9.2
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__WEBSERVER__EXPOSE_CONFIG: "true"
+      AIRFLOW_UID: "50000"
+      _PIP_ADDITIONAL_REQUIREMENTS: " -r /opt/airflow/dags/requirements.txt"
+      GOOGLE_APPLICATION_CREDENTIALS: /opt/airflow/producer/service-account.json
+    user: "50000:0"
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - ./config:/opt/airflow/config
+      - ./kafka/producer:/opt/airflow/producer
+      - ./scripts:/opt/airflow/scripts
+    command: bash -c "airflow db init && airflow users create --username airflow --password airflow --firstname Admin --lastname User --role Admin --email admin@example.com && airflow webserver & airflow scheduler"
+    ports:
+      - "8080:8080"
+    depends_on:
+      - kafka
+      - postgres
+
+  spark-master:
+    image: bitnami/spark:3.5.1
+    environment:
+      SPARK_MODE: master
+      SPARK_MASTER_PORT: 7077
+      SPARK_MASTER_WEBUI_PORT: 8081
+    ports:
+      - "7077:7077"
+      - "8081:8081"
+    volumes:
+      - ./spark/jobs:/opt/spark/jobs
+      - ./spark/jars:/opt/spark/jars
+      - ./config:/opt/spark/config
+
+  spark-worker:
+    image: bitnami/spark:3.5.1
+    environment:
+      SPARK_MODE: worker
+      SPARK_MASTER_URL: spark://spark-master:7077
+      SPARK_WORKER_MEMORY: 2G
+      SPARK_WORKER_CORES: 2
+    depends_on:
+      - spark-master
+    volumes:
+      - ./spark/jobs:/opt/spark/jobs
+      - ./spark/jars:/opt/spark/jars
+      - ./config:/opt/spark/config
+
+  spark-submit:
+    image: bitnami/spark:3.5.1
+    depends_on:
+      - spark-master
+      - kafka
+      - postgres
+    volumes:
+      - ./spark/jobs:/opt/spark/jobs
+      - ./spark/jars:/opt/spark/jars
+      - ./config:/opt/spark/config
+    entrypoint: ["/bin/bash", "-c"]
+    command: "sleep infinity"
+
+  spark-streaming:
+    image: bitnami/spark:3.5.1
+    depends_on:
+      - spark-master
+      - kafka
+      - postgres
+    environment:
+      SPARK_MODE: client
+    volumes:
+      - ./spark/jobs:/opt/spark/jobs
+      - ./spark/jars:/opt/spark/jars
+      - ./config:/opt/spark/config
+    command: >
+      /opt/bitnami/spark/bin/spark-submit
+      --master spark://spark-master:7077
+      --packages org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.1,org.postgresql:postgresql:42.7.3
+      /opt/spark/jobs/streaming_consumer.py
+
+volumes:
+  pgdata:
+
+

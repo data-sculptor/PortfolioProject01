@@ -1,0 +1,9 @@
+bigquery:
+  dataset: bigquery-public-data.new_york_taxi_trips
+  table: tlc_green_trips_2015
+  max_rows: 20000
+
+kafka:
+  broker: localhost:9092
+  topic: nyc_taxi_trips
+

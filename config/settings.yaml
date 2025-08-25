@@ -1,0 +1,23 @@
+project:
+  name: nyc-taxi-portfolio
+
+bigquery:
+  dataset: bigquery-public-data.new_york_taxi_trips
+  table: tlc_green_trips_2015
+  max_rows: 20000
+
+kafka:
+  broker: kafka:29092
+  topic: nyc_taxi_trips
+
+postgres:
+  host: postgres
+  port: 5432
+  db: nyc_taxi
+  user: postgres
+  password: postgres
+
+spark:
+  app_name: nyc-taxi-streaming
+  checkpoint_location: /opt/spark/checkpoints/nyc_taxi
+
